@@ -1,0 +1,30 @@
+{
+  "name": "ai-lobby",
+  "version": "0.2.0",
+  "description": "MoA implementation in Typescript",
+  "type": "module",
+  "bin": {
+    "ai-lobby": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.41",
+    "@ai-sdk/google": "^4.0.50",
+    "@ai-sdk/openai": "^4.0.46",
+    "@ai-sdk/openai-compatible": "^3.0.35",
+    "ai": "^7.0.77",
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2",
+    "piscina": "^5.3.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.0",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}
