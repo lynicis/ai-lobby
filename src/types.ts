@@ -1,4 +1,4 @@
-export type ProviderName = "gemini" | "grok" | "openai" | "claude";
+export type ProviderName = "gemini" | "grok" | "openai" | "claude" | "gateway";
 
 export interface StructuredAnswer {
   summary: string;

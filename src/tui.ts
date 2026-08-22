@@ -35,6 +35,7 @@ export const providerColor = {
   grok: c.magenta,
   openai: c.green,
   claude: c.cyan,
+  gateway: c.yellow,
 } as const;
 
 export function printHeader(title: string): void {

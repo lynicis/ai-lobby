@@ -5,8 +5,7 @@ import { endSynthesis, printSynthesisHeader, writeSynthesisChunk } from "./tui.t
 import type { ModelResponse } from "./types.ts";
 
 const SUPERVISOR_SYSTEM_PROMPT = `You are a neutral moderator. You receive one user question and N
-independent panel answers. Each panelist (Gemini, Grok, ChatGPT, Claude) was
-asked to append a structured JSON block to their answer.
+independent panel answers. Each panelist was asked to append a structured JSON block to their answer.
 
 Your job is to surface the collective signal, NOT to assert your own view —
 including your own panel if you are also a panelist. Do not favor any model.

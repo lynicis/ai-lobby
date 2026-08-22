@@ -2,7 +2,7 @@ import { Piscina } from "piscina";
 import { availableParallelism } from "node:os";
 import { fileURLToPath } from "node:url";
 
-const SIZE = Math.min(4, Math.max(1, availableParallelism()));
+const SIZE = Math.min(8, Math.max(1, availableParallelism()));
 
 let _pool: Piscina | undefined;
 

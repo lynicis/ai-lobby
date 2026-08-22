@@ -41,6 +41,47 @@ cp .env.example .env
 
 Providers with missing keys are skipped automatically; the rest are not blocked.
 
+## LLM Gateways
+
+Two ways to route traffic through a gateway (OpenRouter, LiteLLM, Together, custom proxy, etc.):
+
+### Option A — generic `gateway` panelist slot
+
+Set both `GATEWAY_API_KEY` and `GATEWAY_BASE_URL`. A 5th panelist labeled "Gateway" is added with model IDs prefixed `gateway:`. Missing either var skips the slot, same as the other providers.
+
+```bash
+# OpenRouter example
+GATEWAY_API_KEY=sk-or-v1-...
+GATEWAY_BASE_URL=https://openrouter.ai/api/v1
+GATEWAY_MODEL=gateway:anthropic/claude-3.5-sonnet
+# Optional attribution headers (recommended for OpenRouter)
+GATEWAY_APP_URL=https://github.com/lynicis/ai-lobby
+GATEWAY_APP_TITLE=ai-lobby
+```
+
+```bash
+# LiteLLM proxy example
+GATEWAY_API_KEY=sk-litellm-...
+GATEWAY_BASE_URL=http://localhost:4000/v1
+GATEWAY_MODEL=gateway:gpt-4o
+```
+
+The supervisor also follows this routing when you set `SUPERVISOR_MODEL=gateway:...`.
+
+### Option B — per-provider baseURL override
+
+Route a single first-party provider through a compatible gateway while keeping its native `<provider>:<model>` id and color. Leave the variable empty to use the default endpoint.
+
+```bash
+# Route ChatGPT through OpenRouter
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_MODEL=openai:anthropic/claude-3.5-sonnet
+```
+
+The same pattern works with `ANTHROPIC_BASE_URL`, `GOOGLE_BASE_URL`, and `XAI_BASE_URL`.
+
+Both options can be combined freely.
+
 ## Usage
 
 ```bash
@@ -72,11 +113,20 @@ bun run start --version
 | `GROK_API_KEY` | — | Grok panelist (`openai-compatible` provider, xAI base URL) |
 | `OPENAI_API_KEY` | — | ChatGPT panelist |
 | `ANTHROPIC_API_KEY` | — | Claude panelist + supervisor |
+| `GATEWAY_API_KEY` | — | Generic OpenAI-compatible gateway panelist (requires `GATEWAY_BASE_URL`) |
+| `GATEWAY_BASE_URL` | — | Base URL for the gateway panelist (e.g. `https://openrouter.ai/api/v1`) |
+| `GATEWAY_MODEL` | `gateway:gpt-4o` | Model id for the gateway panelist |
+| `GATEWAY_APP_URL` | — | Optional `HTTP-Referer` header for OpenRouter-style attribution |
+| `GATEWAY_APP_TITLE` | `ai-lobby` | Optional `X-Title` header for OpenRouter-style attribution |
 | `SUPERVISOR_MODEL` | `anthropic:claude-opus-4-5` | Synthesis model |
 | `CLAUDE_PANEL_MODEL` | `anthropic:claude-sonnet-4-5` | Claude panelist |
 | `GEMINI_MODEL` | `google:gemini-2.5-pro` | |
 | `GROK_MODEL` | `openai-compatible:grok-4-latest` | |
 | `OPENAI_MODEL` | `openai:gpt-4o` | |
+| `ANTHROPIC_BASE_URL` | — | Override Anthropic endpoint (e.g. proxy/gateway) |
+| `OPENAI_BASE_URL` | — | Override OpenAI endpoint |
+| `GOOGLE_BASE_URL` | — | Override Gemini endpoint |
+| `XAI_BASE_URL` | — | Override xAI/Grok endpoint |
 | `DEFAULT_TIMEOUT_MS` | `60000` | Per-panelist timeout in ms |
 
 > **Vercel AI SDK** model ID format is `<provider>:<model>`. Each provider is a namespace in the registry, e.g. `registry.languageModel("google:gemini-2.5-pro")`.
