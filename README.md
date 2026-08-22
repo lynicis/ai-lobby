@@ -1,30 +1,36 @@
 # ai-lobby
 
-Tek bir promptu **Gemini, Grok, ChatGPT ve Claude**'a paralel olarak gönderen, cevapları toplayan ve **Claude Opus 4.5 (supervisor)** ile sentezleyip özetleyen terminal aracı.
+A terminal tool that fans out a single prompt to **Gemini, Grok, ChatGPT, and Claude** in parallel, collects their answers, and synthesizes them into a final summary with **Claude Opus 4.5** as a supervisor.
 
+```mermaid
+flowchart TD
+    A[User prompt] --> B[Piscina worker pool]
+    B --> W1[Worker: Gemini]
+    B --> W2[Worker: Grok]
+    B --> W3[Worker: ChatGPT]
+    B --> W4[Worker: Claude]
+    W1 --> S[Supervisor<br/>Opus 4.5<br/>main thread]
+    W2 --> S
+    W3 --> S
+    W4 --> S
+    S --> F[Final summary]
+
+    style S fill:#1f6feb,stroke:#0b3d91,color:#ffffff
+    style A fill:#2da44e,stroke:#1a7f37,color:#ffffff
+    style F fill:#6f42c1,stroke:#4b2e83,color:#ffffff
 ```
-           ┌─ Gemini
-           ├─ Grok
-user prompt ┼─ ChatGPT ──┐
-           └─ Claude    │
-                       ▼
-                Supervisor (Opus 4.5)
-                       │
-                       ▼
-                  Final özet
-```
 
-**Stack:** [Vercel AI SDK](https://ai-sdk.dev/) (tek `generateText` / `streamText` API'si, 4 provider) · [Piscina](https://github.com/piscisaureus/piscina) (worker thread pool) · [commander.js](https://github.com/tj/commander.js) · [dotenv](https://github.com/motdotla/dotenv) · Bun runtime.
+**Stack:** [Vercel AI SDK](https://ai-sdk.dev/) (one `generateText` / `streamText` API across 4 providers) · [Piscina](https://github.com/piscisaureus/piscina) (worker thread pool) · [commander.js](https://github.com/tj/commander.js) · [dotenv](https://github.com/motdotla/dotenv) · Bun runtime.
 
-## Kurulum
+## Installation
 
 ```bash
 bun install
 cp .env.example .env
-# .env içine en az bir API key gir
+# Fill in at least one API key in .env
 ```
 
-### API key alma linkleri
+### Where to get API keys
 
 | Provider | Key |
 |----------|-----|
@@ -33,84 +39,105 @@ cp .env.example .env
 | ChatGPT  | https://platform.openai.com/api-keys |
 | Claude   | https://console.anthropic.com |
 
-Eksik key'li provider'lar otomatik skip edilir; diğerleri bloklanmaz.
+Providers with missing keys are skipped automatically; the rest are not blocked.
 
-## Kullanım
+## Usage
 
 ```bash
-# Normal akış: 4 model + supervisor sentezi
+# Normal flow: 4 models + supervisor synthesis
 bun run start "Explain quantum entanglement in 3 paragraphs"
 
-# Stdin'den prompt
+# Prompt via stdin
 echo "Best language for CLIs in 2026?" | bun run start
 
-# Sadece ham cevaplar
+# Raw answers only, no supervisor
 bun run start --no-supervisor "Compare React vs Vue"
 
-# JSON çıktı (CI/script için)
+# JSON output (for CI / scripting)
 bun run start --raw "What is the capital of France?"
 
-# Özel supervisor modeli
+# Custom supervisor model
 bun run start --supervisor-model anthropic:claude-sonnet-4-5 "..."
 
-# Yardım / versiyon
+# Help / version
 bun run start --help
 bun run start --version
 ```
 
-## Ortam değişkenleri (.env)
+## Environment variables (`.env`)
 
-| Değişken | Varsayılan | Açıklama |
-|----------|------------|----------|
-| `GEMINI_API_KEY` | — | Gemini panel |
-| `GROK_API_KEY` | — | Grok panel (`openai-compatible` provider, xAI base URL) |
-| `OPENAI_API_KEY` | — | ChatGPT panel |
-| `ANTHROPIC_API_KEY` | — | Claude panel + supervisor |
-| `SUPERVISOR_MODEL` | `anthropic:claude-opus-4-5` | Sentez modeli |
-| `CLAUDE_PANEL_MODEL` | `anthropic:claude-sonnet-4-5` | Panelist Claude |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GEMINI_API_KEY` | — | Gemini panelist |
+| `GROK_API_KEY` | — | Grok panelist (`openai-compatible` provider, xAI base URL) |
+| `OPENAI_API_KEY` | — | ChatGPT panelist |
+| `ANTHROPIC_API_KEY` | — | Claude panelist + supervisor |
+| `SUPERVISOR_MODEL` | `anthropic:claude-opus-4-5` | Synthesis model |
+| `CLAUDE_PANEL_MODEL` | `anthropic:claude-sonnet-4-5` | Claude panelist |
 | `GEMINI_MODEL` | `google:gemini-2.5-pro` | |
 | `GROK_MODEL` | `openai-compatible:grok-4-latest` | |
 | `OPENAI_MODEL` | `openai:gpt-4o` | |
-| `DEFAULT_TIMEOUT_MS` | `60000` | Panelist başına timeout |
+| `DEFAULT_TIMEOUT_MS` | `60000` | Per-panelist timeout in ms |
 
-> **Vercel AI SDK** model ID formatı: `<provider>:<model>`. Registry'de her provider bir namespace; `registry.languageModel("google:gemini-2.5-pro")` gibi.
+> **Vercel AI SDK** model ID format is `<provider>:<model>`. Each provider is a namespace in the registry, e.g. `registry.languageModel("google:gemini-2.5-pro")`.
 
-## Mimari
+## Architecture
 
-- `src/index.ts` — **commander.js** CLI giriş noktası, arg parse + stdin fallback
-- `src/config.ts` — **dotenv/config** ile env yükleme, key okuma
+```mermaid
+flowchart LR
+    CLI[index.ts<br/>commander.js] --> ORC[orchestrator.ts]
+    ORC --> POOL[pool.ts<br/>Piscina]
+    POOL -->|runPanelTask x4| WORKER[panel-worker.ts<br/>V8 isolates]
+    WORKER --> REG[registry.ts<br/>providerRegistry]
+    REG --> SDK[Vercel AI SDK]
+    ORC --> SHARED[panel-shared.ts<br/>system prompt + extractStructured]
+    WORKER --> SHARED
+    ORC --> TUI[tui.ts<br/>ANSI output]
+    ORC --> SUP[supervisor.ts<br/>streamText]
+    SUP --> TUI
+    CFG[config.ts<br/>dotenv] -.env.-> CLI
+    CFG -.env.-> WORKER
+
+    style WORKER fill:#1f6feb,stroke:#0b3d91,color:#ffffff
+    style POOL fill:#bf8700,stroke:#8a5d00,color:#ffffff
+    style SUP fill:#6f42c1,stroke:#4b2e83,color:#ffffff
+```
+
+- `src/index.ts` — **commander.js** CLI entry point, arg parsing + stdin fallback
+- `src/config.ts` — **dotenv/config** env loading, key parsing
 - `src/registry.ts` — Vercel AI SDK `createProviderRegistry`: Google, OpenAI, Anthropic, OpenAI-compatible (xAI)
-- `src/pool.ts` — **Piscina** worker thread pool (panelist başına izole V8 isolate)
-- `src/panel-worker.ts` — Piscina task default export; tek bir panelist `generateText` çağrısı, per-worker `AbortController` timeout
-- `src/panel-shared.ts` — Panelist sistem promptu + `extractStructured` (worker + main ortak)
-- `src/orchestrator.ts` — Pool üzerinden 4 paralel `pool.run` → deterministik çıktı için merge
-- `src/supervisor.ts` — Opus 4.5 ile `streamText` sentezi (anlık yazdırma)
-- `src/tui.ts` — Renkli terminal çıktı (ANSI, TTY-aware)
-- `src/types.ts` — `ModelResponse` / `PanelEntry` / `StructuredAnswer` tipleri
+- `src/pool.ts` — **Piscina** worker thread pool (one isolated V8 isolate per panelist)
+- `src/panel-worker.ts` — Piscina task default export; one panelist `generateText` call with per-worker `AbortController` timeout
+- `src/panel-shared.ts` — Panelist system prompt + `extractStructured` (shared between worker and main)
+- `src/orchestrator.ts` — Fans out 4 parallel `pool.run` calls; merges results back into deterministic panel order
+- `src/supervisor.ts` — Opus 4.5 `streamText` synthesis (live-printing)
+- `src/tui.ts` — Colored terminal output (ANSI, TTY-aware)
+- `src/types.ts` — `ModelResponse` / `PanelEntry` / `StructuredAnswer` types
 
-> **Piscina + worker dosyaları TS source olarak referans veriliyor** (`filename: panel-worker.ts`). Bu, **sadece Bun runtime** altında çalışır; Node kullanılacaksa worker dosyası build step ile `.js`'e dönüştürülmeli.
+> **Piscina loads worker files from TS source** (`filename: panel-worker.ts`). This works under the **Bun runtime only**; on Node the worker file must be pre-built to `.js`.
 
-## Paket değişiklikleri (v0.2.0)
+## v0.2.0 — Package changes
 
-| Çıkarıldı | Eklendi |
-|-----------|---------|
+| Removed | Added |
+|---------|-------|
 | `@google/genai` | `ai` |
 | `openai` | `@ai-sdk/google` |
 | `@anthropic-ai/sdk` | `@ai-sdk/openai` |
-| (custom parser) | `@ai-sdk/anthropic` |
-| (custom dotenv) | `@ai-sdk/openai-compatible` |
+| (custom arg parser) | `@ai-sdk/anthropic` |
+| (custom dotenv loader) | `@ai-sdk/openai-compatible` |
 | | `commander` |
 | | `dotenv` |
+| | `piscina` |
 
-4 ayrı SDK → **tek SDK**, 4 provider. Custom arg parser → **commander.js**. Custom env loader → **dotenv**.
+Four separate SDKs → **one SDK** with 4 providers. Custom arg parser → **commander.js**. Custom env loader → **dotenv**. Promise fan-out → **Piscina worker pool**.
 
-## Kapsam dışı
+## Out of scope
 
-- Konuşma geçmişi (her çağrı stateless)
-- Maliyet / token takibi
-- Çoklu tur debate
+- Conversation history (each call is stateless)
+- Cost / token tracking
+- Multi-turn debate
 - Web UI
 
-## Lisans
+## License
 
 MIT
