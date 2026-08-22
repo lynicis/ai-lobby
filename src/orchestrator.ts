@@ -1,16 +1,23 @@
 import { panel } from "./registry.ts";
-import type { ModelResponse, PanelEntry } from "./types.ts";
+import type { DebateRound, ModelResponse, PanelEntry } from "./types.ts";
 import { disposePool, getPool } from "./pool.ts";
-import { extractStructured } from "./panel-shared.ts";
+import { buildDebatePrompt, extractStructured } from "./panel-shared.ts";
 import {
   c,
   printPanelBody,
   printPanelError,
   printPanelHeader,
+  printRoundHeader,
   providerColor,
 } from "./tui.ts";
 
-export async function runPanel(prompt: string, timeoutMs: number): Promise<ModelResponse[]> {
+async function runOneRound(
+  prompt: string,
+  timeoutMs: number,
+  historyBlock: string,
+  roundIndex: number,
+  totalRounds: number,
+): Promise<ModelResponse[]> {
   const pool = getPool();
 
   const liveEntries = panel.filter((e): e is PanelEntry => e.hasKey);
@@ -19,6 +26,9 @@ export async function runPanel(prompt: string, timeoutMs: number): Promise<Model
     prompt,
     timeoutMs,
     label: entry.label,
+    historyBlock,
+    roundIndex,
+    totalRounds,
   }));
 
   const settled = await Promise.allSettled(tasks.map((t) => pool.run(t)));
@@ -70,6 +80,32 @@ export async function runPanel(prompt: string, timeoutMs: number): Promise<Model
     return liveResults[liveIdx++]!;
   });
 
-  await disposePool();
   return merged;
+}
+
+export async function runDebate(
+  prompt: string,
+  timeoutMs: number,
+  historyBlock: string,
+  rounds: number,
+): Promise<DebateRound[]> {
+  const debateRounds: DebateRound[] = [];
+  try {
+    for (let i = 1; i <= rounds; i++) {
+      if (rounds > 1) {
+        printRoundHeader(i, rounds);
+      }
+      const roundPrompt = i === 1 ? prompt : buildDebatePrompt(prompt, debateRounds, i, rounds);
+      const answers = await runOneRound(roundPrompt, timeoutMs, historyBlock, i, rounds);
+      debateRounds.push({ index: i, prompt: roundPrompt, answers });
+    }
+  } finally {
+    await disposePool();
+  }
+  return debateRounds;
+}
+
+export async function runPanel(prompt: string, timeoutMs: number, historyBlock: string): Promise<ModelResponse[]> {
+  const [round] = await runDebate(prompt, timeoutMs, historyBlock, 1);
+  return round!.answers;
 }

@@ -1,12 +1,15 @@
 import { generateText } from "ai";
 import { registry } from "./registry.ts";
-import { PANELIST_SYSTEM_PROMPT } from "./panel-shared.ts";
+import { getSystemPrompt } from "./panel-shared.ts";
 
 export interface PanelTask {
   modelId: string;
   prompt: string;
   timeoutMs: number;
   label: string;
+  historyBlock: string;
+  roundIndex: number;
+  totalRounds: number;
 }
 
 export interface PanelResult {
@@ -22,10 +25,13 @@ export default async function runPanelTask(task: PanelTask): Promise<PanelResult
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), task.timeoutMs);
     try {
+      const userText = task.historyBlock
+        ? `${task.historyBlock}\n\n${task.prompt}`
+        : task.prompt;
       const { text } = await generateText({
         model,
-        system: PANELIST_SYSTEM_PROMPT,
-        prompt: task.prompt,
+        system: getSystemPrompt(task.roundIndex, task.totalRounds),
+        prompt: userText,
         abortSignal: ac.signal,
       });
       return { content: text, durationMs: Date.now() - start };

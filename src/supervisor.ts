@@ -2,7 +2,7 @@ import { streamText } from "ai";
 import { getModel } from "./registry.ts";
 import { config } from "./config.ts";
 import { endSynthesis, printSynthesisHeader, writeSynthesisChunk } from "./tui.ts";
-import type { ModelResponse } from "./types.ts";
+import type { DebateRound, ModelResponse } from "./types.ts";
 
 const SUPERVISOR_SYSTEM_PROMPT = `You are a neutral moderator. You receive one user question and N
 independent panel answers. Each panelist was asked to append a structured JSON block to their answer.
@@ -35,6 +35,9 @@ Panelists holding it.
 - If the panel split evenly with no evidence on either side, say so
   explicitly rather than picking.
 
+If multiple rounds are provided, note how the panel's positions evolved
+across rounds — which views converged, which hardened, and which flipped.
+
 Rules:
 - Never use first-person: no "I think", "I would say", "in my view".
   Always attribute ("3 of 4 agree...", "Claude and Gemini argue...").
@@ -42,7 +45,50 @@ Rules:
 - Do not mention the synthesis process unless asked.
 `;
 
-function buildUserMessage(userPrompt: string, answers: ModelResponse[]): string {
+function formatRoundSection(round: DebateRound): string {
+  const structuredSection = JSON.stringify(
+    round.answers.map((a) => ({
+      provider: a.provider,
+      model: a.model,
+      status: a.error ? "error" : a.structured ? "ok" : "no_struct",
+      error: a.error ?? null,
+      structured: a.structured ?? null,
+    })),
+    null,
+    2,
+  );
+
+  const rawSection = round.answers
+    .map((a) => {
+      if (a.error) return `### ${a.provider} (${a.model}) — ERROR\n${a.error}`;
+      return `### ${a.provider} (${a.model})\n${a.content}`;
+    })
+    .join("\n\n");
+
+  return `<ROUND_${round.index}_STRUCTURED>
+${structuredSection}
+</ROUND_${round.index}_STRUCTURED>
+
+<ROUND_${round.index}_RAW>
+${rawSection}
+</ROUND_${round.index}_RAW>`;
+}
+
+function buildUserMessage(
+  userPrompt: string,
+  answers: ModelResponse[],
+  historyBlock: string,
+  rounds?: DebateRound[],
+): string {
+  const head = historyBlock
+    ? `${historyBlock}\n\n<USER_PROMPT>\n${userPrompt}\n</USER_PROMPT>`
+    : `<USER_PROMPT>\n${userPrompt}\n</USER_PROMPT>`;
+
+  if (rounds && rounds.length > 1) {
+    const sections = rounds.map(formatRoundSection).join("\n\n");
+    return `${head}\n\n${sections}\n\nUse the structured blocks as the primary signal. Refer to the RAW blocks only when you need verbatim quotes to characterize a disagreement or to track how positions changed across rounds.\n\nProduce the synthesis now.`;
+  }
+
   const structuredSection = JSON.stringify(
     answers.map((a) => ({
       provider: a.provider,
@@ -62,9 +108,7 @@ function buildUserMessage(userPrompt: string, answers: ModelResponse[]): string 
     })
     .join("\n\n");
 
-  return `<USER_PROMPT>
-${userPrompt}
-</USER_PROMPT>
+  return `${head}
 
 <PANEL_STRUCTURED>
 ${structuredSection}
@@ -83,6 +127,8 @@ Produce the synthesis now.`;
 export interface SupervisorOptions {
   modelId?: string;
   silent?: boolean;
+  historyBlock?: string;
+  rounds?: DebateRound[];
 }
 
 export async function runSupervisor(
@@ -106,7 +152,7 @@ export async function runSupervisor(
   const result = streamText({
     model,
     system: SUPERVISOR_SYSTEM_PROMPT,
-    prompt: buildUserMessage(userPrompt, answers),
+    prompt: buildUserMessage(userPrompt, answers, options.historyBlock ?? "", options.rounds),
   });
 
   let fullText = "";

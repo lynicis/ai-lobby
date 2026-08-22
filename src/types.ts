@@ -23,3 +23,23 @@ export interface PanelEntry {
   hasKey: boolean;
   keyEnvName: string;
 }
+
+export interface HistoryTurn {
+  timestamp: string;
+  prompt: string;
+  synthesis: string | null;
+}
+
+export interface DebateRound {
+  index: number;
+  prompt: string;
+  answers: ModelResponse[];
+}
+
+export interface HistoryFile {
+  version: 1;
+  turns: HistoryTurn[];
+}
+
+export const HISTORY_FILE_DEFAULT = ".ai-lobby-history.json";
+export const HISTORY_TURN_CAP = 50;

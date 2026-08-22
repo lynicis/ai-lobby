@@ -1,4 +1,4 @@
-import type { StructuredAnswer } from "./types.ts";
+import type { DebateRound, StructuredAnswer } from "./types.ts";
 
 export const PANELIST_SYSTEM_PROMPT = `You are one of several independent AI panelists answering a user's question.
 Answer accurately and concisely.
@@ -49,4 +49,39 @@ export function extractStructured(text: string): StructuredAnswer | undefined {
   } catch {
     return undefined;
   }
+}
+
+const DEBATE_CONTENT_CHAR_CAP = 800;
+
+export function formatDebateBlock(rounds: DebateRound[]): string {
+  if (rounds.length === 0) return "";
+  const sections = rounds.map((round) => {
+    const lines: string[] = [];
+    lines.push(`Round ${round.index} prompt: ${round.prompt}`);
+    for (const answer of round.answers) {
+      const label = answer.provider;
+      const trimmed = answer.content.length > DEBATE_CONTENT_CHAR_CAP
+        ? `${answer.content.slice(0, DEBATE_CONTENT_CHAR_CAP)}…`
+        : answer.content;
+      const status = answer.error ? `[ERROR] ${answer.error}` : trimmed;
+      lines.push(`Round ${round.index} — ${label} (${answer.model}): ${status}`);
+    }
+    return lines.join("\n");
+  });
+  return `<DEBATE_HISTORY>\n${sections.join("\n\n")}\n</DEBATE_HISTORY>`;
+}
+
+export function buildDebatePrompt(
+  originalPrompt: string,
+  priorRounds: DebateRound[],
+  currentRound: number,
+  totalRounds: number,
+): string {
+  const debateBlock = formatDebateBlock(priorRounds);
+  return `${debateBlock}\n\nOriginal question: ${originalPrompt}\n\nThis is round ${currentRound} of ${totalRounds}. React to the prior rounds above: agree, refine, or push back. Stay concise and append your \`lobby-struct\` JSON block as usual.`;
+}
+
+export function getSystemPrompt(roundIndex: number, _totalRounds: number): string {
+  if (roundIndex <= 1) return PANELIST_SYSTEM_PROMPT;
+  return `${PANELIST_SYSTEM_PROMPT}\n\nYou are in a multi-round debate. The prior rounds' answers are prepended to the user message — read them and react (agree, refine, or push back). Keep your answer focused on what changed since the last round.`;
 }

@@ -81,6 +81,12 @@ export function printSynthesisHeader(model: string): void {
   console.error(`\n${c.bold(c.yellow("═══ SUPERVISOR SYNTHESIS"))} ${c.dim(model)}\n`);
 }
 
+export function printRoundHeader(round: number, total: number): void {
+  const label = `Round ${round} / ${total}`;
+  const line = "─".repeat(Math.max(0, 60 - label.length - 4));
+  console.error(`\n${c.bold(c.magenta("═══"))} ${c.bold(label)} ${c.dim(line)}\n`);
+}
+
 export function writeSynthesisChunk(text: string): void {
   process.stdout.write(c.yellow(text));
 }
